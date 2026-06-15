@@ -63,11 +63,14 @@ def get_summary(
         payment_q = payment_q.filter(PaymentRequest.department_id == department_id)
     total_payment_requests = float(payment_q.scalar() or 0)
 
+    # ── Sử dụng kế hoạch nếu chưa có dự toán
+    effective_budget = total_budget if total_budget > 0 else total_planned
+
     # ── Ngân sách còn lại
-    remaining_budget = total_budget - total_actual
+    remaining_budget = effective_budget - total_actual
 
     # ── Tỷ lệ sử dụng ngân sách (%)
-    usage_rate = (total_actual / total_budget * 100) if total_budget > 0 else 0.0
+    usage_rate = (total_actual / effective_budget * 100) if effective_budget > 0 else 0.0
 
     # ── Số khoản vượt kế hoạch (variance_amount > 0 → thực chi > kế hoạch)
     over_q = db.query(func.count(SpendingPlan.id)).filter(SpendingPlan.variance_amount > 0)
@@ -80,7 +83,7 @@ def get_summary(
     overspending_count = int(over_q.scalar() or 0)
 
     return {
-        "total_budget": total_budget,
+        "total_budget": effective_budget,
         "total_planned": total_planned,
         "total_actual": total_actual,
         "total_payment_requests": total_payment_requests,
