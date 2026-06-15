@@ -37,13 +37,23 @@ def normalize_df(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=COL_ALIASES)
 
 def extract_month(val) -> int:
-    """Extract month number from Tháng column (may be int or datetime)."""
+    """Extract month number from Tháng column (may be int or datetime or 'YYYY-MM')."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return 1
     if isinstance(val, (datetime, pd.Timestamp)):
         return val.month
+    val_str = str(val).strip()
+    # Try YYYY-MM
+    match = re.search(r'(?:^|[^0-9])(?:20\d{2})[-/](0?[1-9]|1[0-2])(?:[^0-9]|$)', val_str)
+    if match:
+        return int(match.group(1))
+    # Try MM/YYYY
+    match2 = re.search(r'(?:^|[^0-9])(0?[1-9]|1[0-2])[-/](?:20\d{2})(?:[^0-9]|$)', val_str)
+    if match2:
+        return int(match2.group(1))
     try:
-        return int(clean_numeric(val))
+        month_val = int(clean_numeric(val))
+        return month_val if 1 <= month_val <= 12 else 1
     except Exception:
         return 1
 
@@ -51,6 +61,10 @@ def extract_year_from_date(val, fallback: int = None) -> int:
     """Extract year from a date/datetime value."""
     if isinstance(val, (datetime, pd.Timestamp)):
         return val.year
+    val_str = str(val).strip()
+    match = re.search(r'(20\d{2})', val_str)
+    if match:
+        return int(match.group(1))
     if fallback:
         return fallback
     return datetime.now().year
