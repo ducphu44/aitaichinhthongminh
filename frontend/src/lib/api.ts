@@ -1,7 +1,7 @@
 // API client helper for Dashboard endpoints
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-async function apiFetch(endpoint: string, options: RequestInit = {}) {
+export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   let token = null;
   if (typeof window !== "undefined") {
     token = localStorage.getItem("token");

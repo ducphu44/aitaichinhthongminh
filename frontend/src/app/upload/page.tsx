@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 
 interface Department {
   id: number;
@@ -64,7 +65,7 @@ export default function UploadPage() {
     await Promise.resolve(); // Avoid synchronous setState in effect
     setLoadingHistory(true);
     try {
-      const res = await fetch(`${API_URL}/uploads`);
+      const res = await apiFetch(`/uploads`);
       if (res.ok) setHistory(await res.json());
     } catch { /* silent */ }
     finally { setLoadingHistory(false); }
@@ -72,7 +73,7 @@ export default function UploadPage() {
 
   // Fetch departments + history on load
   useEffect(() => {
-    fetch(`${API_URL}/departments`)
+    apiFetch(`/departments`)
       .then((res) => {
         if (!res.ok) throw new Error("Could not fetch departments");
         return res.json();
@@ -159,7 +160,7 @@ export default function UploadPage() {
     formData.append("department_id", selectedDept.toString());
 
     try {
-      const res = await fetch(`${API_URL}/uploads`, {
+      const res = await apiFetch(`/uploads`, {
         method: "POST",
         body: formData,
       });
@@ -188,7 +189,7 @@ export default function UploadPage() {
     setErrors([]);
 
     try {
-      const res = await fetch(`${API_URL}/uploads/${uploadId}/validate`, {
+      const res = await apiFetch(`/uploads/${uploadId}/validate`, {
         method: "POST",
       });
 
@@ -206,7 +207,7 @@ export default function UploadPage() {
 
       if (data.import_status === "Failed") {
         // Fetch error list
-        const errRes = await fetch(`${API_URL}/uploads/${uploadId}/errors`);
+        const errRes = await apiFetch(`/uploads/${uploadId}/errors`);
         if (errRes.ok) {
           const errData = await errRes.json();
           setErrors(errData);
@@ -230,7 +231,7 @@ export default function UploadPage() {
     setErrors([]);
 
     try {
-      const res = await fetch(`${API_URL}/uploads/${uploadId}/import`, {
+      const res = await apiFetch(`/uploads/${uploadId}/import`, {
         method: "POST",
       });
 
@@ -249,7 +250,7 @@ export default function UploadPage() {
       fetchHistory(); // refresh history card
     } catch (err: unknown) {
       // Re-fetch errors in case some duplicate code errors were logged during import
-      const errRes = await fetch(`${API_URL}/uploads/${uploadId}/errors`);
+      const errRes = await apiFetch(`/uploads/${uploadId}/errors`);
       if (errRes.ok) {
         const errData = await errRes.json();
         setErrors(errData);
