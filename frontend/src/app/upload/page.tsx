@@ -102,23 +102,20 @@ export default function UploadPage() {
 
 
 
-  /**
-   * Try to detect the department from the filename.
-   * Returns the matching department or null.
-   */
   const detectDeptFromFilename = (filename: string): Department | null => {
-    const lower = filename.toLowerCase().replace(/[_\-\s]/g, " ");
-    // Keyword map: order matters (longer/more-specific first)
-    const keywords: [string[], string][] = [
-      [["marketing", "truyen thong", "mkt"], "MKT"],
-      [["tuyen sinh", "ts"], "TS"],
-      [["cong tac sinh vien", "ctsv"], "CTSV"],
-      [["hop tac doanh nghiep", "htdn"], "HTDN"],
-      [["hop tac hoc thuat", "htht"], "HTHT"],
-      [["cntt", "cong nghe thong tin", "it"], "CNTT"],
+    // Replace punctuation with spaces so word boundaries (\b) work correctly
+    const lower = filename.toLowerCase().replace(/[_\-\.]/g, " ");
+    // Use regex with word boundaries to avoid partial matches (e.g., "ts" inside "ctsv")
+    const keywords: [RegExp, string][] = [
+      [/\b(marketing|truyen thong|mkt)\b/, "MKT"],
+      [/\b(cong tac sinh vien|ctsv)\b/, "CTSV"],
+      [/\b(tuyen sinh|ts)\b/, "TS"],
+      [/\b(hop tac doanh nghiep|htdn)\b/, "HTDN"],
+      [/\b(hop tac hoc thuat|htht)\b/, "HTHT"],
+      [/\b(cntt|cong nghe thong tin|it)\b/, "CNTT"],
     ];
-    for (const [keys, code] of keywords) {
-      if (keys.some((k) => lower.includes(k))) {
+    for (const [regex, code] of keywords) {
+      if (regex.test(lower)) {
         return departments.find((d) => d.code === code) ?? null;
       }
     }
