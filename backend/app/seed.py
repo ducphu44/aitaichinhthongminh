@@ -40,6 +40,12 @@ def seed_mock_data(db: Session):
         Department(name="Phòng Đào Tạo", code="DT01"),
         Department(name="Phòng Hành Chính", code="HC01"),
         Department(name="Phòng Tài Chính", code="TC01"),
+        Department(name="Phòng CNTT", code="CNTT"),
+        Department(name="Phòng Marketing Truyền thông", code="MKT"),
+        Department(name="Phòng Tuyển sinh", code="TS"),
+        Department(name="Phòng Công tác Sinh viên", code="CTSV"),
+        Department(name="Phòng Hợp tác Doanh nghiệp & Phát triển", code="HTDN"),
+        Department(name="Phòng Hợp tác Học thuật", code="HTHT"),
     ]
     db.add_all(depts)
     db.commit()
