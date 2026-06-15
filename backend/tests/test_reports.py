@@ -12,8 +12,6 @@ from app.models import GeneratedReport, User
 def override_get_current_user():
     return User(id=1, email="admin@abc.com", role="admin")
 
-app.dependency_overrides[get_current_user] = override_get_current_user
-
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_reports.db"
 
 engine = create_engine(
@@ -28,7 +26,13 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(autouse=True)
+def override_dependencies():
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_db, None)
 
 client = TestClient(app)
 

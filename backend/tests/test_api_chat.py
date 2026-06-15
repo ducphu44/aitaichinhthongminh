@@ -12,7 +12,7 @@ def override_dependency(client):
     from app.main import app
     app.dependency_overrides[get_current_user] = override_get_current_user
     yield
-    app.dependency_overrides = {}
+    app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
 async def test_chat_success(client, sample_chat_request):

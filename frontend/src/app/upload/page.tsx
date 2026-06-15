@@ -86,12 +86,15 @@ export default function UploadPage() {
         console.error(err);
         // Fallback departments in case backend is offline during initialization
         setDepartments([
-          { id: 1, name: "Phòng CNTT", code: "CNTT" },
-          { id: 2, name: "Phòng Marketing Truyền thông", code: "MKT" },
-          { id: 3, name: "Phòng Tuyển sinh", code: "TS" },
-          { id: 4, name: "Phòng Công tác Sinh viên", code: "CTSV" },
-          { id: 5, name: "Phòng Hợp tác Doanh nghiệp & Phát triển", code: "HTDN" },
-          { id: 6, name: "Phòng Hợp tác Học thuật", code: "HTHT" },
+          { id: 1, name: "Phòng Đào Tạo", code: "DT01" },
+          { id: 2, name: "Phòng Hành Chính", code: "HC01" },
+          { id: 3, name: "Phòng Tài Chính", code: "TC01" },
+          { id: 4, name: "Phòng CNTT", code: "CNTT" },
+          { id: 5, name: "Phòng Marketing Truyền thông", code: "MKT" },
+          { id: 6, name: "Phòng Tuyển sinh", code: "TS" },
+          { id: 7, name: "Phòng Công tác Sinh viên", code: "CTSV" },
+          { id: 8, name: "Phòng Hợp tác Doanh nghiệp & Phát triển", code: "HTDN" },
+          { id: 9, name: "Phòng Hợp tác Học thuật", code: "HTHT" },
         ]);
       });
 

@@ -184,6 +184,8 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
             db.add(budget_item)
             total_imported += 1
 
+        db.flush()
+
         # 2. PROCESS SHEET: Ke_hoach_chi_tieu -> spending_plans
         df_spending = pd.read_excel(xl, sheet_name=sheet_mapping["Ke_hoach_chi_tieu"])
         df_spending = normalize_df(df_spending)  # rename (VND) columns
@@ -245,6 +247,8 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
                 )
                 db.add(spending_plan)
             total_imported += 1
+
+        db.flush()
 
         # 3. PROCESS SHEET: De_nghi_thanh_toan -> payment_requests
         df_payment = pd.read_excel(xl, sheet_name=sheet_mapping["De_nghi_thanh_toan"])

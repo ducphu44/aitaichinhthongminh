@@ -184,9 +184,9 @@ export default function DashboardPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {loadingSummary ? (
-          Array.from({ length: 5 }).map((_, i) => (
+          Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-36" />
           ))
         ) : (
@@ -211,13 +211,6 @@ export default function DashboardPage() {
               subtitle="Chưa sử dụng"
               icon={<PiggyIcon />}
               color={(summary?.remaining_budget ?? 0) >= 0 ? "green" : "red"}
-            />
-            <SummaryCard
-              title="Tổng đề nghị thanh toán"
-              value={summary?.total_payment_requests ?? 0}
-              subtitle="Giá trị thanh toán"
-              icon={<ReceiptIcon />}
-              color="orange"
             />
             <SummaryCard
               title="Tỷ lệ sử dụng ngân sách"
