@@ -399,7 +399,7 @@ export default function UploadPage() {
             {uploadId === null ? (
               <button
                 type="submit"
-                disabled={!file || uploading}
+                disabled={!file || uploading || !!deptMismatch}
                 className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold text-sm hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
               >
                 {uploading ? (
