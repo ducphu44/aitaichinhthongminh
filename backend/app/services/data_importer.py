@@ -131,7 +131,7 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
                     upload_id=upload_id,
                     row_index=int(idx) + 2,
                     error_message=f"Trùng mã dự toán: '{budget_code}' đã tồn tại trong cơ sở dữ liệu hoặc trong file.",
-                    raw_data=json.dumps({k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}, ensure_ascii=False)
+                    raw_data=json.dumps({k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}, ensure_ascii=False, default=str)
                 ))
                 continue
 
@@ -264,7 +264,7 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
                     upload_id=upload_id,
                     row_index=int(idx) + 2,
                     error_message=f"Trùng mã đề nghị thanh toán: '{payment_code}' đã tồn tại trong cơ sở dữ liệu hoặc trong file.",
-                    raw_data=json.dumps({k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}, ensure_ascii=False)
+                    raw_data=json.dumps({k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}, ensure_ascii=False, default=str)
                 ))
                 continue
 
