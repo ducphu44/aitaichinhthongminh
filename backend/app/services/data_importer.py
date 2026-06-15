@@ -123,14 +123,12 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
             budget_code = clean_text(row.get("Mã dự toán"))
             if not budget_code:
                 continue
-            
-            # Check for duplicate in DB or current batch
-            db_dup = db.query(BudgetItem).filter(BudgetItem.budget_code == budget_code).first()
-            if db_dup or budget_code in local_budget_codes:
+            # Check duplicate in current file batch
+            if budget_code in local_budget_codes:
                 db.add(ImportError(
                     upload_id=upload_id,
                     row_index=int(idx) + 2,
-                    error_message=f"Trùng mã dự toán: '{budget_code}' đã tồn tại trong cơ sở dữ liệu hoặc trong file.",
+                    error_message=f"Trúng mã dự toán: '{budget_code}' đã tồn tại trong file.",
                     raw_data=json.dumps({k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}, ensure_ascii=False, default=str)
                 ))
                 continue
@@ -164,24 +162,41 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
                     db.flush()
                 category_id = cat.id
 
-            budget_item = BudgetItem(
-                department_id=department_id,
-                budget_code=budget_code,
-                fiscal_year=int(clean_numeric(row.get("Năm", datetime.now().year))),
-                quarter=int(clean_quarter_num(row.get("Quý", 1))),
-                program_id=program_id,
-                category_id=category_id,
-                item_name=clean_text(row.get("Hạng mục", "Không rõ")),
-                description=clean_text(row.get("Mô tả")),
-                unit=clean_text(row.get("Đơn vị tính")),
-                quantity=int(clean_numeric(row.get("Số lượng", 0))),
-                unit_price=clean_numeric(row.get("Đơn giá", 0)),
-                estimated_amount=clean_numeric(row.get("Thành tiền", 0)),
-                priority=clean_text(row.get("Ưu tiên")),
-                status=clean_text(row.get("Trạng thái", "draft")),
-                upload_id=upload_id
-            )
-            db.add(budget_item)
+            db_dup = db.query(BudgetItem).filter(BudgetItem.budget_code == budget_code).first()
+            if db_dup:
+                db_dup.department_id = department_id
+                db_dup.fiscal_year = int(clean_numeric(row.get("Năm", datetime.now().year)))
+                db_dup.quarter = int(clean_quarter_num(row.get("Quý", 1)))
+                db_dup.program_id = program_id
+                db_dup.category_id = category_id
+                db_dup.item_name = clean_text(row.get("Hạng mục", "Không rõ"))
+                db_dup.description = clean_text(row.get("Mô tả"))
+                db_dup.unit = clean_text(row.get("Đơn vị tính"))
+                db_dup.quantity = int(clean_numeric(row.get("Số lượng", 0)))
+                db_dup.unit_price = clean_numeric(row.get("Đơn giá", 0))
+                db_dup.estimated_amount = clean_numeric(row.get("Thành tiền", 0))
+                db_dup.priority = clean_text(row.get("Ưu tiên"))
+                db_dup.status = clean_text(row.get("Trạng thái", "draft"))
+                db_dup.upload_id = upload_id
+            else:
+                budget_item = BudgetItem(
+                    department_id=department_id,
+                    budget_code=budget_code,
+                    fiscal_year=int(clean_numeric(row.get("Năm", datetime.now().year))),
+                    quarter=int(clean_quarter_num(row.get("Quý", 1))),
+                    program_id=program_id,
+                    category_id=category_id,
+                    item_name=clean_text(row.get("Hạng mục", "Không rõ")),
+                    description=clean_text(row.get("Mô tả")),
+                    unit=clean_text(row.get("Đơn vị tính")),
+                    quantity=int(clean_numeric(row.get("Số lượng", 0))),
+                    unit_price=clean_numeric(row.get("Đơn giá", 0)),
+                    estimated_amount=clean_numeric(row.get("Thành tiền", 0)),
+                    priority=clean_text(row.get("Ưu tiên")),
+                    status=clean_text(row.get("Trạng thái", "draft")),
+                    upload_id=upload_id
+                )
+                db.add(budget_item)
             total_imported += 1
 
         db.flush()
@@ -261,13 +276,12 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
             if not payment_code:
                 continue
 
-            # Check duplicate in DB or batch
-            db_dup = db.query(PaymentRequest).filter(PaymentRequest.payment_code == payment_code).first()
-            if db_dup or payment_code in local_payment_codes:
+            # Check duplicate in current file batch
+            if payment_code in local_payment_codes:
                 db.add(ImportError(
                     upload_id=upload_id,
                     row_index=int(idx) + 2,
-                    error_message=f"Trùng mã đề nghị thanh toán: '{payment_code}' đã tồn tại trong cơ sở dữ liệu hoặc trong file.",
+                    error_message=f"Trúng mã đề nghị thanh toán: '{payment_code}' đã tồn tại trong file.",
                     raw_data=json.dumps({k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}, ensure_ascii=False, default=str)
                 ))
                 continue
@@ -302,24 +316,41 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
             # Derive fiscal_year from request date (file may not have a Năm column)
             fiscal_year = extract_year_from_date(ngay_de_nghi, fallback=int(clean_numeric(row.get("Năm", datetime.now().year)) or datetime.now().year))
 
-            payment_request = PaymentRequest(
-                department_id=department_id,
-                payment_code=payment_code,
-                request_date=req_date,
-                fiscal_year=fiscal_year,
-                quarter=int(clean_quarter_num(row.get("Quý", 1))),
-                vendor_id=vendor_id,
-                payment_content=clean_text(row.get("Nội dung thanh toán", "Không rõ")),
-                amount_before_vat=clean_numeric(row.get("Giá trị trước VAT", 0)),
-                vat_rate=10.0,  # Standard 10%
-                vat_amount=clean_numeric(row.get("VAT", 0)),
-                total_amount=clean_numeric(row.get("Tổng thanh toán", 0)),
-                payment_status=clean_text(row.get("Trạng thái", "pending")),
-                priority=clean_text(row.get("Ưu tiên")),
-                related_budget_code=clean_text(row.get("Mã dự toán liên quan")),
-                upload_id=upload_id
-            )
-            db.add(payment_request)
+            db_dup = db.query(PaymentRequest).filter(PaymentRequest.payment_code == payment_code).first()
+            if db_dup:
+                db_dup.department_id = department_id
+                db_dup.request_date = req_date
+                db_dup.fiscal_year = fiscal_year
+                db_dup.quarter = int(clean_quarter_num(row.get("Quý", 1)))
+                db_dup.vendor_id = vendor_id
+                db_dup.payment_content = clean_text(row.get("Nội dung thanh toán", "Không rõ"))
+                db_dup.amount_before_vat = clean_numeric(row.get("Giá trị trước VAT", 0))
+                db_dup.vat_rate = 10.0
+                db_dup.vat_amount = clean_numeric(row.get("VAT", 0))
+                db_dup.total_amount = clean_numeric(row.get("Tổng thanh toán", 0))
+                db_dup.payment_status = clean_text(row.get("Trạng thái", "pending"))
+                db_dup.priority = clean_text(row.get("Ưu tiên"))
+                db_dup.related_budget_code = clean_text(row.get("Mã dự toán liên quan"))
+                db_dup.upload_id = upload_id
+            else:
+                payment_request = PaymentRequest(
+                    department_id=department_id,
+                    payment_code=payment_code,
+                    request_date=req_date,
+                    fiscal_year=fiscal_year,
+                    quarter=int(clean_quarter_num(row.get("Quý", 1))),
+                    vendor_id=vendor_id,
+                    payment_content=clean_text(row.get("Nội dung thanh toán", "Không rõ")),
+                    amount_before_vat=clean_numeric(row.get("Giá trị trước VAT", 0)),
+                    vat_rate=10.0,  # Standard 10%
+                    vat_amount=clean_numeric(row.get("VAT", 0)),
+                    total_amount=clean_numeric(row.get("Tổng thanh toán", 0)),
+                    payment_status=clean_text(row.get("Trạng thái", "pending")),
+                    priority=clean_text(row.get("Ưu tiên")),
+                    related_budget_code=clean_text(row.get("Mã dự toán liên quan")),
+                    upload_id=upload_id
+                )
+                db.add(payment_request)
             total_imported += 1
 
         # Finalise status update for UploadedFile

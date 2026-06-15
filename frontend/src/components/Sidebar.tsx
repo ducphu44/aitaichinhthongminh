@@ -74,7 +74,7 @@ export default function Sidebar() {
   const visibleMenuItems = menuItems.filter((item) => item.roles.includes(role));
 
   return (
-    <div className="w-72 h-screen bg-slate-900 text-white flex flex-col shadow-xl">
+    <div className="w-72 h-screen bg-slate-900 text-white flex flex-col shadow-xl print:hidden">
       <div className="px-6 py-6 border-b border-slate-800 flex flex-col items-start justify-center">
         <div className="text-lg font-bold tracking-wide flex items-center gap-2">
           <span className="text-blue-400">AI</span> 
