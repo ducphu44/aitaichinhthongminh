@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { generateReport, getReports, ReportGenerateRequest, ReportResponse } from "@/lib/api";
+import { useReactToPrint } from "react-to-print";
 import { FiRefreshCw, FiCopy, FiFileText, FiPieChart } from "react-icons/fi";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,6 +16,12 @@ export default function ReportsPage() {
   const [editableMarkdown, setEditableMarkdown] = useState("");
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef,
+    documentTitle: selectedReport?.title || "Bao_cao_tai_chinh",
+  });
 
   // Form State
   const [fiscalYear, setFiscalYear] = useState(2026);
@@ -191,7 +198,7 @@ export default function ReportsPage() {
                 <FiCopy className="mr-2" /> Copy
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={() => handlePrint()}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded text-sm flex items-center transition-colors shadow-lg shadow-emerald-500/20"
               >
                 <FiFileText className="mr-2" /> Xuất PDF
@@ -202,7 +209,7 @@ export default function ReportsPage() {
 
         {/* Report Content */}
         {selectedReport ? (
-          <div className="flex-1 overflow-auto bg-gray-950 p-6 flex flex-col items-center print:p-0 print:overflow-visible print:block">
+          <div ref={contentRef} className="flex-1 overflow-auto bg-gray-950 p-6 flex flex-col items-center print:p-8 print:overflow-visible print:block print:bg-white print:text-black">
             
             {/* Chart Section */}
             {!isEditing && chartData.length > 0 && (
