@@ -17,8 +17,30 @@ def seed_mock_data(db: Session):
         
         # Add staff and manager with department_id if departments exist later
     
+    depts_data = [
+        {"name": "Phòng Đào Tạo", "code": "DT01"},
+        {"name": "Phòng Hành Chính", "code": "HC01"},
+        {"name": "Phòng Tài Chính", "code": "TC01"},
+        {"name": "Phòng CNTT", "code": "CNTT"},
+        {"name": "Phòng Marketing Truyền thông", "code": "MKT"},
+        {"name": "Phòng Tuyển sinh", "code": "TS"},
+        {"name": "Phòng Công tác Sinh viên", "code": "CTSV"},
+        {"name": "Phòng Hợp tác Doanh nghiệp & Phát triển", "code": "HTDN"},
+        {"name": "Phòng Hợp tác Học thuật", "code": "HTHT"},
+    ]
+    
     # Check if data already exists
     if db.query(Department).count() > 0:
+        # Check if we need to add missing departments
+        existing_codes = {d.code for d in db.query(Department).all()}
+        new_depts = []
+        for d_data in depts_data:
+            if d_data["code"] not in existing_codes:
+                new_depts.append(Department(name=d_data["name"], code=d_data["code"]))
+        if new_depts:
+            db.add_all(new_depts)
+            db.commit()
+
         # Check if staff and manager need to be updated with department
         staff = db.query(User).filter(User.email == "staff@abc.com").first()
         if not staff:
