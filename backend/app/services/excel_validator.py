@@ -27,6 +27,8 @@ COL_ALIASES = {
     "Ngân sách kế hoạch (VND)": "Ngân sách kế hoạch",
     "Thực chi (VND)": "Thực chi",
     "Chênh lệch (VND)": "Chênh lệch",
+    "Đã thanh toán": "Thực chi",
+    "Còn lại": "Chênh lệch",
     # De_nghi_thanh_toan
     "Giá trị trước VAT (VND)": "Giá trị trước VAT",
     "Tổng thanh toán (VND)": "Tổng thanh toán",
