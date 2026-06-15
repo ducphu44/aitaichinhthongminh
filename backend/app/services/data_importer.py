@@ -191,20 +191,43 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
                     db.flush()
                 program_id = prog.id
 
-            spending_plan = SpendingPlan(
-                department_id=department_id,
-                plan_month=plan_month,
-                fiscal_year=fiscal_year,
-                quarter=int(clean_quarter_num(row.get("Quý", 1))),
-                program_id=program_id,
-                planned_amount=clean_numeric(row.get("Ngân sách kế hoạch", 0)),
-                actual_amount=clean_numeric(row.get("Thực chi", 0)),
-                variance_amount=clean_numeric(row.get("Chênh lệch", 0)),
-                usage_rate=clean_numeric(row.get("Tỷ lệ sử dụng", 0)),
-                warning_status=clean_text(row.get("Cảnh báo")),
-                upload_id=upload_id
-            )
-            db.add(spending_plan)
+            planned_amount = clean_numeric(row.get("Ngân sách kế hoạch", 0))
+            actual_amount = clean_numeric(row.get("Thực chi", 0))
+            variance_amount = clean_numeric(row.get("Chênh lệch", 0))
+            usage_rate = clean_numeric(row.get("Tỷ lệ sử dụng", 0))
+            warning_status = clean_text(row.get("Cảnh báo"))
+            quarter = int(clean_quarter_num(row.get("Quý", 1)))
+
+            existing_plan = db.query(SpendingPlan).filter(
+                SpendingPlan.department_id == department_id,
+                SpendingPlan.fiscal_year == fiscal_year,
+                SpendingPlan.plan_month == plan_month,
+                SpendingPlan.program_id == program_id
+            ).first()
+
+            if existing_plan:
+                existing_plan.planned_amount = planned_amount
+                existing_plan.actual_amount = actual_amount
+                existing_plan.variance_amount = variance_amount
+                existing_plan.usage_rate = usage_rate
+                existing_plan.warning_status = warning_status
+                existing_plan.quarter = quarter
+                existing_plan.upload_id = upload_id
+            else:
+                spending_plan = SpendingPlan(
+                    department_id=department_id,
+                    plan_month=plan_month,
+                    fiscal_year=fiscal_year,
+                    quarter=quarter,
+                    program_id=program_id,
+                    planned_amount=planned_amount,
+                    actual_amount=actual_amount,
+                    variance_amount=variance_amount,
+                    usage_rate=usage_rate,
+                    warning_status=warning_status,
+                    upload_id=upload_id
+                )
+                db.add(spending_plan)
             total_imported += 1
 
         # 3. PROCESS SHEET: De_nghi_thanh_toan -> payment_requests
