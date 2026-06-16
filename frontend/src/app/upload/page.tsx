@@ -116,6 +116,9 @@ export default function UploadPage() {
       [/\b(hop tac doanh nghiep|htdn)\b/, "HTDN"],
       [/\b(hop tac hoc thuat|htht)\b/, "HTHT"],
       [/\b(cntt|cong nghe thong tin|it)\b/, "CNTT"],
+      [/\b(dao tao|dt|dt01)\b/, "DT01"],
+      [/\b(hanh chinh|hc|hc01)\b/, "HC01"],
+      [/\b(tai chinh|tc|tc01)\b/, "TC01"],
     ];
     for (const [regex, code] of keywords) {
       if (regex.test(lower)) {
