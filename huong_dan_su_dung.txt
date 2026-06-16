@@ -1,0 +1,83 @@
+========================================================================
+           HƯỚNG DẪN SỬ DỤNG DỰ ÁN AI TRỢ LÝ TÀI CHÍNH
+========================================================================
+
+Hệ thống được thiết kế dành riêng cho Phòng Tài chính, giúp tự động hóa 
+giám sát ngân sách, phát hiện vượt chi tiêu, tự động viết báo cáo tài chính 
+bằng AI và hỏi đáp cơ sở dữ liệu bằng ngôn ngữ tự nhiên.
+
+------------------------------------------------------------------------
+I. KHỞI CHẠY HỆ THỐNG DƯỚI LOCAL (MÁY CỦA BẠN)
+------------------------------------------------------------------------
+
+1. Khởi chạy Backend (FastAPI):
+   - Mở Terminal và di chuyển vào thư mục backend/:
+     cd backend
+   - Tạo và kích hoạt môi trường ảo:
+     * macOS/Linux:
+       /usr/bin/python3 -m venv venv
+       source venv/bin/activate
+     * Windows:
+       python -m venv venv
+       venv\Scripts\activate
+   - Cài đặt các thư viện cần thiết:
+     pip install -r requirements.txt
+   - Kiểm tra/Tạo file `.env` chứa khoá API OpenAI hợp lệ:
+     DATABASE_URL=sqlite:///./sql_app.db
+     OPENAI_API_KEY=sk-xxxx... # Điền API key OpenAI của bạn
+   - Khởi chạy server:
+     uvicorn app.main:app --reload
+     (Backend sẽ chạy tại địa chỉ: http://localhost:8000)
+
+2. Khởi chạy Frontend (Next.js):
+   - Mở Terminal mới và di chuyển vào thư mục frontend/:
+     cd frontend
+   - Cài đặt các thư viện Node.js:
+     npm install
+   - Khởi chạy giao diện phát triển:
+     npm run dev
+     (Frontend sẽ chạy tại địa chỉ: http://localhost:3000)
+
+------------------------------------------------------------------------
+II. LUỒNG TRẢI NGHIỆM CHỨC NĂNG (DEMO FLOW)
+------------------------------------------------------------------------
+
+Khi truy cập giao diện web tại http://localhost:3000, bạn thực hiện theo 
+các bước sau để kiểm tra toàn bộ tính năng:
+
+Bước 1: Xem Dashboard Tổng Quan & Trải Nghiệm Chatbot Nổi
+- Biểu đồ & Chỉ số: Màn hình chính hiển thị các biểu đồ trực quan (cột, tròn) 
+  về ngân sách dự toán so với thực chi của các phòng ban dựa trên dữ liệu mẫu 
+  được nạp tự động.
+- Database AI Assistant (Mới tích hợp): 
+  * Click vào biểu tượng Chat màu xanh ở góc dưới cùng bên phải.
+  * Cửa sổ chat nổi lên. Bạn có thể chọn nhanh các câu hỏi gợi ý như: 
+    "Có phòng ban nào chi tiêu vượt hạn mức không?" hoặc tự gõ câu hỏi bất kỳ.
+  * AI sẽ tự động sinh mã SQL, thực hiện truy vấn cơ sở dữ liệu và trả về 
+    kết quả định dạng bảng trực quan ngay trong cửa sổ chat mà không làm 
+    gián đoạn việc xem dashboard của bạn.
+
+Bước 2: Nhập Dữ Liệu Excel (Upload Excel)
+- Chuyển sang menu Upload Excel trên thanh điều hướng bên trái (Sidebar).
+- Tải lên tệp Excel dữ liệu tài chính (Dự toán ngân sách, Kế hoạch chi tiêu, 
+  Đề nghị thanh toán).
+- Hệ thống sẽ tiến hành Validate dữ liệu:
+  * Nếu dữ liệu hợp lệ: Trạng thái chuyển thành "Validated", nút Import 
+    sẽ xuất hiện để bạn nhấn nạp dữ liệu vào Database.
+  * Nếu dữ liệu có lỗi: Hệ thống sẽ chỉ ra cụ thể lỗi ở dòng nào để sửa lại.
+
+Bước 3: Cảnh Báo Tài Chính (Alerts)
+- Vào mục Alerts để kiểm tra các cảnh báo tự động của hệ thống đối với những 
+  khoản chi tiêu "Overbudget" (Vượt ngân sách kế hoạch hoặc vượt hạn mức).
+
+Bước 4: AI Financial Assistant (Toàn màn hình)
+- Vào mục AI Chat/AI Assistant để sử dụng giao diện trò chuyện chuyên sâu 
+  toàn màn hình để yêu cầu AI phân tích sâu hơn hoặc giải thích nguyên nhân 
+  chênh lệch số liệu.
+
+Bước 5: Tự Động Tạo Báo Cáo & Xuất PDF (Reports)
+- Vào mục Reports, chọn năm tài chính và nhấn "Generate Report".
+- Đợi khoảng 10 giây để AI thu thập dữ liệu từ database, phân tích xu hướng 
+  chi tiêu và tự động viết lời nhận xét, đánh giá chuyên môn.
+- Sau khi báo cáo được tạo ra, nhấn nút "Xuất PDF" để tải xuống file báo cáo 
+  chuẩn trang A4 để in hoặc gửi cho ban giám đốc.
