@@ -64,11 +64,26 @@ Hệ thống AI Assistant được thiết kế đặc thù cho Phòng Tài chí
 1. **Dashboard:** Mở `http://localhost:3000`. Ngay lập tức, bạn sẽ thấy Sidebar với mã đề tài **AI20K-046**. Tại màn hình Dashboard, dữ liệu ngân sách, các biểu đồ cột và tròn sẽ hiển thị dựa trên Mock Data.
 2. **Upload Excel:** Chuyển sang menu **Upload Excel**. Bạn có thể tải lên một file Excel chứa dữ liệu dự toán (nếu chưa có file chuẩn, bạn có thể tạo một file có các cột `Mã phòng ban`, `Mã ngân sách`, `Số tiền`). Sau khi Validate, hệ thống sẽ Import vào Database.
 3. **Alerts (Cảnh báo):** Chuyển sang menu **Alerts** để xem hệ thống tự động lọc ra những khoản chi "Overbudget" (Vượt ngân sách).
-4. **AI Chat:** Vào mục **AI Chat**. Bạn có thể gõ câu hỏi: *"Năm 2026 phòng Đào tạo chi tiêu thế nào?"* AI sẽ tra cứu CSDL và trả lời ngay.
+4. **AI Chat:** Vào mục **AI Chat** hoặc bấm vào nút Chatbot ở góc phải bên dưới Dashboard để đặt câu hỏi trực tiếp cho AI.
 5. **Reports (Báo cáo):** Vào mục **Reports**, chọn "Năm 2026" và ấn **Generate Report**. Chờ khoảng 10 giây để AI phân tích số liệu và tự động viết nhận xét.
 6. **Xuất PDF:** Sau khi AI viết xong báo cáo (có Markdown hiển thị đẹp mắt), hãy ấn nút **Xuất PDF** để in hoặc lưu lại thành bản báo cáo chuẩn A4.
 
-## 7. Hướng dẫn Deploy (Vercel & Render)
+## 7. Các câu hỏi mẫu cho Trợ lý AI (Sample Queries)
+
+Dưới đây là một số câu hỏi mẫu bằng tiếng Việt và tiếng Anh bạn có thể hỏi Trợ lý ảo (AI Assistant) để kiểm tra khả năng truy vấn SQL tự động:
+
+- **Về ngân sách & chi tiêu:**
+  - *"Tổng dự toán ngân sách năm nay là bao nhiêu?"*
+  - *"Tỷ lệ sử dụng ngân sách của phòng Đào tạo là bao nhiêu?"*
+  - *"Có phòng ban nào chi tiêu vượt hạn mức kế hoạch không?"*
+- **Về danh sách chi tiết:**
+  - *"Xem 5 khoản chi lớn nhất gần đây"*
+  - *"Liệt kê danh sách các nhà cung cấp (vendors) trong hệ thống"*
+- **Truy vấn phức tạp:**
+  - *"Phòng ban nào có số tiền đề nghị thanh toán lớn nhất?"*
+  - *"Hãy phân tích cơ cấu chi tiêu theo từng quý của phòng CNTT"*
+
+## 8. Hướng dẫn Deploy (Vercel & Render)
 
 Hệ thống được thiết kế hoàn hảo để phân tách Frontend và Backend, giúp bạn dễ dàng đưa ứng dụng lên Internet hoàn toàn miễn phí.
 
