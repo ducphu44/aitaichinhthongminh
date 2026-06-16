@@ -6,6 +6,7 @@ import BudgetVsActualChart from "@/components/dashboard/BudgetVsActualChart";
 import DepartmentChart from "@/components/dashboard/DepartmentChart";
 import OverspendingTable from "@/components/dashboard/OverspendingTable";
 import DashboardFilters from "@/components/dashboard/DashboardFilters";
+import ChatWidget from "@/components/dashboard/ChatWidget";
 import {
   fetchSummary,
   fetchMonthlyTrend,
@@ -292,6 +293,7 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+      <ChatWidget />
     </div>
   );
 }
