@@ -2,14 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 from sqlalchemy.orm import Session
 import os
 import shutil
+import json
 from typing import List
 from datetime import datetime
 
 from ..database import get_db
-from ..models import UploadedFile, ImportError, Department
+from ..models import UploadedFile, ImportError, Department, BudgetItem, SpendingPlan, PaymentRequest
 from ..services.excel_validator import validate_excel_file
 from ..services.data_importer import import_excel_data
-
 from ..auth import RoleChecker
 
 router = APIRouter(
@@ -40,6 +40,9 @@ def list_uploads(db: Session = Depends(get_db)):
             "total_rows": f.total_rows,
             "valid_rows": f.valid_rows,
             "error_rows": f.error_rows,
+            "inserted_rows": f.inserted_rows,
+            "updated_rows": f.updated_rows,
+            "preview_details": json.loads(f.preview_details) if f.preview_details else [],
             "uploaded_at": (f.uploaded_at.isoformat() + "Z") if f.uploaded_at else None,
         }
         for f, dept_name in files
@@ -186,12 +189,16 @@ def import_file(upload_id: int, db: Session = Depends(get_db)):
 
     # Perform importing
     try:
-        imported_count = import_excel_data(db_file.file_path, upload_id, db_file.department_id, db)
+        stats = import_excel_data(db_file.file_path, upload_id, db_file.department_id, db)
         return {
             "id": db_file.id,
             "file_name": db_file.file_name,
             "import_status": "Imported",
-            "imported_rows": imported_count,
+            "imported_rows": stats["inserted"] + stats["updated"],
+            "inserted_rows": stats["inserted"],
+            "updated_rows": stats["updated"],
+            "unchanged_rows": stats["unchanged"],
+            "preview_details": stats.get("preview_details", []),
             "message": "Dữ liệu đã được nạp thành công vào cơ sở dữ liệu."
         }
     except Exception as e:
@@ -199,4 +206,88 @@ def import_file(upload_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+# 4.5 POST /uploads/{upload_id}/preview
+@router.post("/{upload_id}/preview")
+def preview_import_file(upload_id: int, db: Session = Depends(get_db)):
+    # Verify file upload record exists
+    db_file = db.query(UploadedFile).filter(UploadedFile.id == upload_id).first()
+    if not db_file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Upload with ID {upload_id} not found."
+        )
+
+    # Only preview if status is Validated
+    if db_file.import_status != "Validated":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Chỉ cho phép preview file có trạng thái 'Validated'. Trạng thái hiện tại: '{db_file.import_status}'."
+        )
+
+    # Do not preview if there are row-level errors
+    if db_file.error_rows > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Không thể preview file vì còn tồn tại {db_file.error_rows} dòng lỗi."
+        )
+
+    # Perform dry-run importing
+    try:
+        stats = import_excel_data(db_file.file_path, upload_id, db_file.department_id, db, dry_run=True)
+        return {
+            "id": db_file.id,
+            "file_name": db_file.file_name,
+            "inserted_rows": stats["inserted"],
+            "updated_rows": stats["updated"],
+            "unchanged_rows": stats["unchanged"],
+            "preview_details": stats.get("preview_details", []),
+            "message": "Preview hoàn tất."
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+# 5. GET /uploads/{upload_id}/records
+@router.get("/{upload_id}/records")
+def get_upload_records(upload_id: int, db: Session = Depends(get_db)):
+    db_file = db.query(UploadedFile).filter(UploadedFile.id == upload_id).first()
+    if not db_file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Upload with ID {upload_id} not found."
+        )
+
+    budget_items = db.query(BudgetItem).filter(BudgetItem.upload_id == upload_id).limit(5).all()
+    spending_plans = db.query(SpendingPlan).filter(SpendingPlan.upload_id == upload_id).limit(5).all()
+    payment_requests = db.query(PaymentRequest).filter(PaymentRequest.upload_id == upload_id).limit(5).all()
+
+    return {
+        "budget_items": [
+            {
+                "Mã dự toán": b.budget_code,
+                "Hạng mục": b.item_name,
+                "Thành tiền": b.estimated_amount,
+                "Trạng thái": b.status
+            } for b in budget_items
+        ],
+        "spending_plans": [
+            {
+                "Tháng": s.plan_month,
+                "Ngân sách kế hoạch": s.planned_amount,
+                "Thực chi": s.actual_amount,
+                "Chênh lệch": s.variance_amount
+            } for s in spending_plans
+        ],
+        "payment_requests": [
+            {
+                "Mã đề nghị": p.payment_code,
+                "Nội dung": p.payment_content,
+                "Tổng thanh toán": p.total_amount,
+                "Trạng thái": p.payment_status
+            } for p in payment_requests
+        ]
+    }
 

@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import json
 import re
@@ -87,10 +88,33 @@ def slugify_category_code(name: str) -> str:
     s1 = re.sub(r'\s+', '_', s1).upper()
     return f"CP_{s1}"
 
-def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Session):
+
+def load_excel_file(file_path: str):
+    """Attempt to load Excel file with openpyxl, fallback to xlrd if zip/format error."""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".numbers":
+        raise ValueError("Hệ thống không hỗ trợ định dạng Apple Numbers (.numbers). Vui lòng mở file bằng Numbers và chọn File -> Export To -> Excel (.xlsx) để tải lên.")
+
     try:
-        xl = pd.ExcelFile(file_path)
+        xl = pd.ExcelFile(file_path, engine="openpyxl")
+        return xl, "openpyxl"
+    except Exception as e:
+        err_str = str(e)
+        if "Content_Types" in err_str or "zip" in err_str.lower() or "BadZipFile" in err_str:
+            try:
+                xl = pd.ExcelFile(file_path, engine="xlrd")
+                return xl, "xlrd"
+            except Exception as e2:
+                raise ValueError(f"File không đúng chuẩn .xlsx và cũng không phải .xls hợp lệ. Chi tiết lỗi: {str(e2)}")
+        raise ValueError(f"Lỗi đọc file: {err_str}")
+
+
+def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Session, dry_run: bool = False):
+    try:
+        xl, engine = load_excel_file(file_path)
         sheet_names = xl.sheet_names
+    except ValueError:
+        raise
     except Exception as e:
         raise ValueError(f"Không thể đọc file Excel: {str(e)}")
 
@@ -110,11 +134,61 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
     # Track codes locally to prevent intra-file duplicates
     local_budget_codes = set()
     local_payment_codes = set()
+    local_spending_keys = set()
+
+    inserted = 0
+    updated = 0
+    unchanged = 0
+    preview_details = []
+
+    ATTR_TO_EXCEL = {
+        "item_name": "Hạng mục",
+        "description": "Mô tả",
+        "unit": "Đơn vị tính",
+        "quantity": "Số lượng",
+        "unit_price": "Đơn giá",
+        "estimated_amount": "Thành tiền",
+        "priority": "Ưu tiên",
+        "status": "Trạng thái",
+        "fiscal_year": "Năm",
+        "quarter": "Quý",
+        "plan_month": "Tháng",
+        "department_id": "Mã phòng ban",
+        "program_id": "Mã chương trình",
+        "category_id": "Mã hạng mục",
+        "amount": "Số tiền",
+        "request_date": "Ngày đề nghị",
+        "payment_date": "Ngày thanh toán",
+        "approver": "Người phê duyệt"
+    }
+
+    def add_preview(sheet: str, code: str, action: str, details: list):
+        if len(preview_details) < 50:
+            preview_details.append({
+                "sheet": sheet,
+                "code": code,
+                "action": action,
+                "details": details
+            })
+
+    def apply_updates(obj, new_attrs):
+        changes = []
+        for k, v in new_attrs.items():
+            old_v = getattr(obj, k)
+            if old_v != v:
+                col_name = ATTR_TO_EXCEL.get(k, k)
+                changes.append({
+                    "column": col_name,
+                    "old": old_v,
+                    "new": v
+                })
+                setattr(obj, k, v)
+        return changes
 
     # We use a sub-transaction (nested transaction) so we can rollback if anything fails catastrophically
     try:
         # 1. PROCESS SHEET: Du_toan_ngan_sach -> budget_items
-        df_dutoan = pd.read_excel(xl, sheet_name=sheet_mapping["Du_toan_ngan_sach"])
+        df_dutoan = pd.read_excel(xl, sheet_name=sheet_mapping["Du_toan_ngan_sach"], engine=engine)
         df_dutoan = normalize_df(df_dutoan)  # rename (VND) columns
         df_dutoan = df_dutoan.dropna(how='all')
         df_dutoan = clean_dataframe(df_dutoan, "Du_toan_ngan_sach")
@@ -162,47 +236,54 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
                     db.flush()
                 category_id = cat.id
 
+            new_attrs = {
+                "department_id": department_id,
+                "fiscal_year": int(clean_numeric(row.get("Năm", datetime.now().year))),
+                "quarter": int(clean_quarter_num(row.get("Quý", 1))),
+                "program_id": program_id,
+                "category_id": category_id,
+                "item_name": clean_text(row.get("Hạng mục", "Không rõ")),
+                "description": clean_text(row.get("Mô tả")),
+                "unit": clean_text(row.get("Đơn vị tính")),
+                "quantity": int(clean_numeric(row.get("Số lượng", 0))),
+                "unit_price": clean_numeric(row.get("Đơn giá", 0)),
+                "estimated_amount": clean_numeric(row.get("Thành tiền", 0)),
+                "priority": clean_text(row.get("Ưu tiên")),
+                "status": clean_text(row.get("Trạng thái", "draft"))
+            }
+
             db_dup = db.query(BudgetItem).filter(BudgetItem.budget_code == budget_code).first()
             if db_dup:
-                db_dup.department_id = department_id
-                db_dup.fiscal_year = int(clean_numeric(row.get("Năm", datetime.now().year)))
-                db_dup.quarter = int(clean_quarter_num(row.get("Quý", 1)))
-                db_dup.program_id = program_id
-                db_dup.category_id = category_id
-                db_dup.item_name = clean_text(row.get("Hạng mục", "Không rõ"))
-                db_dup.description = clean_text(row.get("Mô tả"))
-                db_dup.unit = clean_text(row.get("Đơn vị tính"))
-                db_dup.quantity = int(clean_numeric(row.get("Số lượng", 0)))
-                db_dup.unit_price = clean_numeric(row.get("Đơn giá", 0))
-                db_dup.estimated_amount = clean_numeric(row.get("Thành tiền", 0))
-                db_dup.priority = clean_text(row.get("Ưu tiên"))
-                db_dup.status = clean_text(row.get("Trạng thái", "draft"))
-                db_dup.upload_id = upload_id
+                changed_keys = apply_updates(db_dup, new_attrs)
+                if changed_keys:
+                    db_dup.upload_id = upload_id
+                    updated += 1
+                    add_preview("Dự toán ngân sách", budget_code, "Cập nhật", changed_keys)
+                else:
+                    db_dup.upload_id = upload_id
+                    unchanged += 1
             else:
                 budget_item = BudgetItem(
-                    department_id=department_id,
                     budget_code=budget_code,
-                    fiscal_year=int(clean_numeric(row.get("Năm", datetime.now().year))),
-                    quarter=int(clean_quarter_num(row.get("Quý", 1))),
-                    program_id=program_id,
-                    category_id=category_id,
-                    item_name=clean_text(row.get("Hạng mục", "Không rõ")),
-                    description=clean_text(row.get("Mô tả")),
-                    unit=clean_text(row.get("Đơn vị tính")),
-                    quantity=int(clean_numeric(row.get("Số lượng", 0))),
-                    unit_price=clean_numeric(row.get("Đơn giá", 0)),
-                    estimated_amount=clean_numeric(row.get("Thành tiền", 0)),
-                    priority=clean_text(row.get("Ưu tiên")),
-                    status=clean_text(row.get("Trạng thái", "draft")),
-                    upload_id=upload_id
+                    upload_id=upload_id,
+                    **new_attrs
                 )
                 db.add(budget_item)
-            total_imported += 1
+                inserted += 1
+                insert_details = []
+                for k in ["item_name", "quantity", "unit_price", "estimated_amount"]:
+                    if k in new_attrs and new_attrs[k]:
+                        insert_details.append({
+                            "column": ATTR_TO_EXCEL.get(k, k),
+                            "old": "-",
+                            "new": new_attrs[k]
+                        })
+                add_preview("Dự toán ngân sách", budget_code, "Thêm mới", insert_details)
 
         db.flush()
 
         # 2. PROCESS SHEET: Ke_hoach_chi_tieu -> spending_plans
-        df_spending = pd.read_excel(xl, sheet_name=sheet_mapping["Ke_hoach_chi_tieu"])
+        df_spending = pd.read_excel(xl, sheet_name=sheet_mapping["Ke_hoach_chi_tieu"], engine=engine)
         df_spending = normalize_df(df_spending)  # rename (VND) columns
         df_spending = df_spending.dropna(how='all')
         df_spending = clean_dataframe(df_spending, "Ke_hoach_chi_tieu")
@@ -238,35 +319,61 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
                 SpendingPlan.program_id == program_id
             ).first()
 
+            spending_key = (department_id, fiscal_year, plan_month, program_id)
+            if spending_key in local_spending_keys:
+                db.add(ImportError(
+                    upload_id=upload_id,
+                    row_index=int(idx) + 2,
+                    error_message=f"Trùng kế hoạch chi tiêu: Tháng {plan_month}/{fiscal_year} cho Chương trình này đã tồn tại trong file.",
+                    raw_data=json.dumps({k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}, ensure_ascii=False, default=str)
+                ))
+                continue
+            
+            local_spending_keys.add(spending_key)
+
+            new_attrs = {
+                "planned_amount": planned_amount,
+                "actual_amount": actual_amount,
+                "variance_amount": variance_amount,
+                "usage_rate": usage_rate,
+                "warning_status": warning_status,
+                "quarter": quarter
+            }
+
             if existing_plan:
-                existing_plan.planned_amount = planned_amount
-                existing_plan.actual_amount = actual_amount
-                existing_plan.variance_amount = variance_amount
-                existing_plan.usage_rate = usage_rate
-                existing_plan.warning_status = warning_status
-                existing_plan.quarter = quarter
-                existing_plan.upload_id = upload_id
+                changed_keys = apply_updates(existing_plan, new_attrs)
+                if changed_keys:
+                    existing_plan.upload_id = upload_id
+                    updated += 1
+                    add_preview("Kế hoạch chi tiêu", f"Tháng {plan_month}/{fiscal_year}", "Cập nhật", changed_keys)
+                else:
+                    existing_plan.upload_id = upload_id
+                    unchanged += 1
             else:
                 spending_plan = SpendingPlan(
                     department_id=department_id,
                     plan_month=plan_month,
                     fiscal_year=fiscal_year,
-                    quarter=quarter,
                     program_id=program_id,
-                    planned_amount=planned_amount,
-                    actual_amount=actual_amount,
-                    variance_amount=variance_amount,
-                    usage_rate=usage_rate,
-                    warning_status=warning_status,
-                    upload_id=upload_id
+                    upload_id=upload_id,
+                    **new_attrs
                 )
                 db.add(spending_plan)
-            total_imported += 1
+                inserted += 1
+                insert_details = []
+                for k in ["item_name", "amount", "status"]:
+                    if k in new_attrs and new_attrs[k]:
+                        insert_details.append({
+                            "column": ATTR_TO_EXCEL.get(k, k),
+                            "old": "-",
+                            "new": new_attrs[k]
+                        })
+                add_preview("Kế hoạch chi tiêu", f"Tháng {plan_month}/{fiscal_year}", "Thêm mới", insert_details)
 
         db.flush()
 
         # 3. PROCESS SHEET: De_nghi_thanh_toan -> payment_requests
-        df_payment = pd.read_excel(xl, sheet_name=sheet_mapping["De_nghi_thanh_toan"])
+        df_payment = pd.read_excel(xl, sheet_name=sheet_mapping["De_nghi_thanh_toan"], engine=engine)
         df_payment = normalize_df(df_payment)  # rename (VND) columns
         df_payment = df_payment.dropna(how='all')
         df_payment = clean_dataframe(df_payment, "De_nghi_thanh_toan")
@@ -317,48 +424,66 @@ def import_excel_data(file_path: str, upload_id: int, department_id: int, db: Se
             fiscal_year = extract_year_from_date(ngay_de_nghi, fallback=int(clean_numeric(row.get("Năm", datetime.now().year)) or datetime.now().year))
 
             db_dup = db.query(PaymentRequest).filter(PaymentRequest.payment_code == payment_code).first()
+            new_attrs = {
+                "department_id": department_id,
+                "request_date": req_date,
+                "fiscal_year": fiscal_year,
+                "quarter": int(clean_quarter_num(row.get("Quý", 1))),
+                "vendor_id": vendor_id,
+                "payment_content": clean_text(row.get("Nội dung thanh toán", "Không rõ")),
+                "amount_before_vat": clean_numeric(row.get("Giá trị trước VAT", 0)),
+                "vat_rate": 10.0,
+                "vat_amount": clean_numeric(row.get("VAT", 0)),
+                "total_amount": clean_numeric(row.get("Tổng thanh toán", 0)),
+                "payment_status": clean_text(row.get("Trạng thái", "pending")),
+                "priority": clean_text(row.get("Ưu tiên")),
+                "related_budget_code": clean_text(row.get("Mã dự toán liên quan"))
+            }
+
             if db_dup:
-                db_dup.department_id = department_id
-                db_dup.request_date = req_date
-                db_dup.fiscal_year = fiscal_year
-                db_dup.quarter = int(clean_quarter_num(row.get("Quý", 1)))
-                db_dup.vendor_id = vendor_id
-                db_dup.payment_content = clean_text(row.get("Nội dung thanh toán", "Không rõ"))
-                db_dup.amount_before_vat = clean_numeric(row.get("Giá trị trước VAT", 0))
-                db_dup.vat_rate = 10.0
-                db_dup.vat_amount = clean_numeric(row.get("VAT", 0))
-                db_dup.total_amount = clean_numeric(row.get("Tổng thanh toán", 0))
-                db_dup.payment_status = clean_text(row.get("Trạng thái", "pending"))
-                db_dup.priority = clean_text(row.get("Ưu tiên"))
-                db_dup.related_budget_code = clean_text(row.get("Mã dự toán liên quan"))
-                db_dup.upload_id = upload_id
+                changed_keys = apply_updates(db_dup, new_attrs)
+                if changed_keys:
+                    db_dup.upload_id = upload_id
+                    updated += 1
+                    add_preview("Đề nghị thanh toán", payment_code, "Cập nhật", changed_keys)
+                else:
+                    db_dup.upload_id = upload_id
+                    unchanged += 1
             else:
                 payment_request = PaymentRequest(
-                    department_id=department_id,
                     payment_code=payment_code,
-                    request_date=req_date,
-                    fiscal_year=fiscal_year,
-                    quarter=int(clean_quarter_num(row.get("Quý", 1))),
-                    vendor_id=vendor_id,
-                    payment_content=clean_text(row.get("Nội dung thanh toán", "Không rõ")),
-                    amount_before_vat=clean_numeric(row.get("Giá trị trước VAT", 0)),
-                    vat_rate=10.0,  # Standard 10%
-                    vat_amount=clean_numeric(row.get("VAT", 0)),
-                    total_amount=clean_numeric(row.get("Tổng thanh toán", 0)),
-                    payment_status=clean_text(row.get("Trạng thái", "pending")),
-                    priority=clean_text(row.get("Ưu tiên")),
-                    related_budget_code=clean_text(row.get("Mã dự toán liên quan")),
-                    upload_id=upload_id
+                    upload_id=upload_id,
+                    **new_attrs
                 )
                 db.add(payment_request)
-            total_imported += 1
+                inserted += 1
+                insert_details = []
+                for k in ["item_name", "amount", "status"]:
+                    if k in new_attrs and new_attrs[k]:
+                        insert_details.append({
+                            "column": ATTR_TO_EXCEL.get(k, k),
+                            "old": "-",
+                            "new": new_attrs[k]
+                        })
+                add_preview("Đề nghị thanh toán", payment_code, "Thêm mới", insert_details)
 
-        # Finalise status update for UploadedFile
-        db.query(UploadedFile).filter(UploadedFile.id == upload_id).update({
-            "import_status": "Imported"
-        })
-        db.commit()
-        return total_imported
+        if not dry_run:
+            # Finalise status update for UploadedFile
+            db.query(UploadedFile).filter(UploadedFile.id == upload_id).update({
+                "import_status": "Imported",
+                "inserted_rows": inserted,
+                "updated_rows": updated,
+                "preview_details": json.dumps(preview_details, ensure_ascii=False) if preview_details else None
+            })
+            db.commit()
+        else:
+            db.rollback()
+        return {
+            "inserted": inserted,
+            "updated": updated,
+            "unchanged": unchanged,
+            "preview_details": preview_details
+        }
 
     except Exception as e:
         db.rollback()

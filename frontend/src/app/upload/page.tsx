@@ -22,6 +22,19 @@ interface UploadStats {
   error_rows: number;
 }
 
+interface PreviewChange {
+  column: string;
+  old: any;
+  new: any;
+}
+
+interface PreviewDetail {
+  sheet: string;
+  code: string;
+  action: string;
+  details: PreviewChange[];
+}
+
 interface UploadRecord {
   id: number;
   file_name: string;
@@ -31,6 +44,9 @@ interface UploadRecord {
   total_rows: number;
   valid_rows: number;
   error_rows: number;
+  inserted_rows?: number;
+  updated_rows?: number;
+  preview_details?: PreviewDetail[];
   uploaded_at: string | null;
 }
 
@@ -51,10 +67,14 @@ export default function UploadPage() {
   const [errors, setErrors] = useState<ImportError[]>([]);
   const [importedRows, setImportedRows] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [importStats, setImportStats] = useState<{ inserted: number; updated: number; unchanged: number } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewDryRunStats, setPreviewDryRunStats] = useState<{ inserted: number; updated: number; unchanged: number } | null>(null);
+  const [previewDetails, setPreviewDetails] = useState<PreviewDetail[]>([]);
 
-  // History
   const [history, setHistory] = useState<UploadRecord[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedHistoryDetails, setSelectedHistoryDetails] = useState<PreviewDetail[] | null>(null);
 
   // Department mismatch detection
   const [deptMismatch, setDeptMismatch] = useState<{ suggestedId: number; suggestedName: string } | null>(null);
@@ -131,6 +151,17 @@ export default function UploadPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const chosen = e.target.files[0];
+      
+      if (chosen.name.toLowerCase().endsWith(".numbers")) {
+        setNotification({
+          type: "error",
+          message: "Hệ thống không hỗ trợ file Apple Numbers. Vui lòng mở file trên phần mềm Numbers và chọn File -> Export To -> Excel (.xlsx) để tải lên."
+        });
+        setFile(null);
+        e.target.value = ""; // clear input
+        return;
+      }
+      
       setFile(chosen);
       // Reset flow
       setUploadId(null);
@@ -139,6 +170,9 @@ export default function UploadPage() {
       setValidationStatus("pending");
       setNotification(null);
       setDeptMismatch(null);
+      setImportStats(null);
+      setPreviewDryRunStats(null);
+      setPreviewDetails([]);
 
       // Auto-detect department from filename
       const detected = detectDeptFromFilename(chosen.name);
@@ -226,6 +260,39 @@ export default function UploadPage() {
     }
   };
 
+  const handlePreview = async () => {
+    if (!uploadId) return;
+
+    setPreviewing(true);
+    setNotification(null);
+    setPreviewDryRunStats(null);
+
+    try {
+      const res = await apiFetch(`/uploads/${uploadId}/preview`, {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewDryRunStats({
+          inserted: data.inserted_rows || 0,
+          updated: data.updated_rows || 0,
+          unchanged: data.unchanged_rows || 0,
+        });
+        setPreviewDetails(data.preview_details || []);
+        setNotification({ type: "success", message: "Đã giả lập nạp dữ liệu xong. Xem kết quả phân tích bên dưới." });
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Preview failed");
+      }
+
+    } catch (err: unknown) {
+      setNotification({ type: "error", message: `Lỗi phân tích xem trước: ${(err as Error).message}` });
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   const handleImport = async () => {
     if (!uploadId) return;
 
@@ -246,11 +313,26 @@ export default function UploadPage() {
       const data = await res.json();
       setValidationStatus(data.import_status);
       setImportedRows(data.imported_rows);
+      setImportStats({
+        inserted: data.inserted_rows || 0,
+        updated: data.updated_rows || 0,
+        unchanged: data.unchanged_rows || 0,
+      });
+
+      let msg = `Đã nạp thành công ${data.imported_rows} dòng dữ liệu vào cơ sở dữ liệu!`;
+      if (data.inserted_rows === 0 && data.updated_rows === 0 && data.unchanged_rows > 0) {
+        msg = `Quá trình import hoàn tất nhưng không có dữ liệu nào bị thay đổi so với hệ thống. (${data.unchanged_rows} dòng được giữ nguyên).`;
+      } else if (data.updated_rows > 0) {
+        msg = `Đã nạp thành công! Thêm mới ${data.inserted_rows} dòng, cập nhật (ghi đè) ${data.updated_rows} dòng.`;
+      }
+
       setNotification({
         type: "success",
-        message: `Đã nạp thành công ${data.imported_rows} dòng dữ liệu vào cơ sở dữ liệu!`,
+        message: msg,
       });
       fetchHistory(); // refresh history card
+      setPreviewDetails(data.preview_details || []);
+
     } catch (err: unknown) {
       // Re-fetch errors in case some duplicate code errors were logged during import
       const errRes = await apiFetch(`/uploads/${uploadId}/errors`);
@@ -265,7 +347,8 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
+    <>
+      <div className="p-8 max-w-6xl mx-auto space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
@@ -415,21 +498,48 @@ export default function UploadPage() {
               </button>
             ) : (
               <div className="space-y-3">
-                {validationStatus === "Validated" && (
+                {validationStatus === "Validated" && !previewDryRunStats && (
                   <button
                     type="button"
-                    onClick={handleImport}
-                    disabled={importing}
-                    className="w-full bg-emerald-600 text-white rounded-xl py-3 font-semibold text-sm hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 transition-all duration-200 flex items-center justify-center gap-2"
+                    onClick={handlePreview}
+                    disabled={previewing}
+                    className="w-full bg-cyan-600 text-white rounded-xl py-3 font-semibold text-sm hover:bg-cyan-700 disabled:bg-slate-200 disabled:text-slate-400 transition-all duration-200 flex items-center justify-center gap-2"
                   >
-                    {importing ? (
+                    {previewing ? (
                       <>
-                        <span className="animate-spin text-sm">⌛</span> Đang nạp dữ liệu...
+                        <span className="animate-spin text-sm">⌛</span> Đang phân tích...
                       </>
                     ) : (
-                      "Nạp vào Database (Import)"
+                      "Xem trước thay đổi (Preview)"
                     )}
                   </button>
+                )}
+
+                {validationStatus === "Validated" && previewDryRunStats && (
+                  <>
+                    <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 text-sm">
+                      <p className="font-bold text-slate-800 dark:text-slate-200 mb-2">Kết quả phân tích trước khi nạp:</p>
+                      <ul className="space-y-1">
+                        <li className="flex justify-between"><span className="text-emerald-600 dark:text-emerald-400 font-medium">Thêm mới:</span> <span className="font-bold">{previewDryRunStats.inserted} dòng</span></li>
+                        <li className="flex justify-between"><span className="text-amber-600 dark:text-amber-400 font-medium">Cập nhật (ghi đè):</span> <span className="font-bold">{previewDryRunStats.updated} dòng</span></li>
+                        <li className="flex justify-between"><span className="text-slate-500 font-medium">Giữ nguyên:</span> <span className="font-bold">{previewDryRunStats.unchanged} dòng</span></li>
+                      </ul>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleImport}
+                      disabled={importing}
+                      className="w-full bg-emerald-600 text-white rounded-xl py-3 font-semibold text-sm hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 transition-all duration-200 flex items-center justify-center gap-2 mt-2"
+                    >
+                      {importing ? (
+                        <>
+                          <span className="animate-spin text-sm">⌛</span> Đang nạp dữ liệu...
+                        </>
+                      ) : (
+                        "Xác nhận Nạp vào Database (Import)"
+                      )}
+                    </button>
+                  </>
                 )}
                 
                 {validationStatus !== "Imported" && validationStatus !== "Validated" && (
@@ -464,7 +574,9 @@ export default function UploadPage() {
                     setErrors([]);
                     setValidationStatus("pending");
                     setImportedRows(null);
-                    setNotification(null);
+                    setImportStats(null);
+                    setPreviewDryRunStats(null);
+                    setPreviewDetails([]);
                   }}
                   className="w-full border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/30 text-slate-600 dark:text-slate-300 rounded-xl py-3 font-semibold text-sm transition-all duration-200"
                 >
@@ -515,6 +627,83 @@ export default function UploadPage() {
                   </p>
                 </div>
               </div>
+              
+              {/* Detailed Changes Table */}
+              {previewDetails && previewDetails.length > 0 && (
+                <div className="mt-6 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 dark:bg-slate-800 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                    <h4 className="font-medium text-slate-800 dark:text-slate-200 text-sm">
+                      {validationStatus === "Imported" ? "Chi tiết dữ liệu vừa nạp (Mẫu tối đa 50 dòng)" : "Chi tiết thay đổi dữ liệu (Mẫu tối đa 50 dòng)"}
+                    </h4>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 font-medium">Sheet</th>
+                          <th className="px-4 py-3 font-medium">Mã tham chiếu</th>
+                          <th className="px-4 py-3 font-medium">Hành động</th>
+                          <th className="px-4 py-3 font-medium">Chi tiết</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {previewDetails.map((detail, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                            <td className="px-4 py-3 whitespace-nowrap text-slate-700 dark:text-slate-300">
+                              <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-medium">
+                                {detail.sheet}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
+                              {detail.code}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
+                                detail.action === 'Thêm mới' 
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' 
+                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
+                              }`}>
+                                {detail.action}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+                              <div className="flex flex-col gap-1.5">
+                                {Array.isArray(detail.details) ? detail.details.map((change, cidx) => {
+                                  const formatValue = (v: any) => {
+                                    if (v === null || v === undefined || v === "-") return "Trống";
+                                    if (typeof v === "number" || !isNaN(Number(v))) {
+                                      // Only format if it's a reasonably large number to avoid messing up small IDs, but for amount/price it's needed
+                                      const num = Number(v);
+                                      if (num > 1000 || num < -1000 || typeof v === "number") {
+                                        return new Intl.NumberFormat('vi-VN').format(num);
+                                      }
+                                    }
+                                    return String(v);
+                                  };
+                                  return (
+                                    <div key={cidx} className="flex flex-wrap items-center gap-1.5 text-xs bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-md">
+                                      <span className="font-semibold text-slate-700 dark:text-slate-300 mr-1">{change.column}:</span>
+                                      {detail.action === 'Cập nhật' ? (
+                                        <>
+                                          <span className="line-through text-slate-400 dark:text-slate-500">{formatValue(change.old)}</span>
+                                          <span className="text-slate-400 dark:text-slate-500">➔</span>
+                                          <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatValue(change.new)}</span>
+                                        </>
+                                      ) : (
+                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatValue(change.new)}</span>
+                                      )}
+                                    </div>
+                                  );
+                                }) : String(detail.details)}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -619,12 +808,13 @@ export default function UploadPage() {
                 <tr className="bg-slate-50 dark:bg-slate-800/40 text-xs text-slate-500 uppercase tracking-wider font-semibold">
                   <th className="text-left py-3 px-5">#</th>
                   <th className="text-left py-3 px-4">Tên file</th>
-                  <th className="text-left py-3 px-4">Phòng ban</th>
                   <th className="text-center py-3 px-4">Trạng thái</th>
                   <th className="text-center py-3 px-4">Tổng dòng</th>
-                  <th className="text-center py-3 px-4">Hợp lệ</th>
+                  <th className="text-center py-3 px-4">Thêm mới</th>
+                  <th className="text-center py-3 px-4">Cập nhật</th>
                   <th className="text-center py-3 px-4">Lỗi</th>
-                  <th className="text-right py-3 px-5">Thời gian</th>
+                  <th className="text-right py-3 px-4">Thời gian</th>
+                  <th className="text-center py-3 px-5">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
@@ -661,9 +851,6 @@ export default function UploadPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-slate-500 dark:text-slate-400 text-xs">
-                        {rec.department_name || "—"}
-                      </td>
                       <td className="py-3 px-4 text-center">
                         <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${s.cls}`}>
                           {s.label}
@@ -673,13 +860,26 @@ export default function UploadPage() {
                         {rec.total_rows > 0 ? rec.total_rows.toLocaleString("vi-VN") : "—"}
                       </td>
                       <td className="py-3 px-4 text-center font-semibold text-emerald-600 dark:text-emerald-400">
-                        {rec.valid_rows > 0 ? rec.valid_rows.toLocaleString("vi-VN") : "—"}
+                        {rec.inserted_rows !== undefined && rec.import_status === "Imported" ? rec.inserted_rows.toLocaleString("vi-VN") : (rec.valid_rows > 0 ? rec.valid_rows.toLocaleString("vi-VN") : "—")}
+                      </td>
+                      <td className="py-3 px-4 text-center font-semibold text-amber-600 dark:text-amber-400">
+                        {rec.updated_rows !== undefined && rec.import_status === "Imported" ? rec.updated_rows.toLocaleString("vi-VN") : "—"}
                       </td>
                       <td className="py-3 px-4 text-center font-semibold text-rose-500">
                         {rec.error_rows > 0 ? rec.error_rows.toLocaleString("vi-VN") : <span className="text-slate-300">0</span>}
                       </td>
-                      <td className="py-3 px-5 text-right text-xs text-slate-400" title={uploadedAt?.toLocaleString("vi-VN") ?? ""}>
+                      <td className="py-3 px-4 text-right text-xs text-slate-400" title={uploadedAt?.toLocaleString("vi-VN") ?? ""}>
                         {timeLabel}
+                      </td>
+                      <td className="py-3 px-5 text-center">
+                        {rec.import_status === "Imported" && rec.preview_details && rec.preview_details.length > 0 && (
+                          <button
+                            onClick={() => setSelectedHistoryDetails(rec.preview_details!)}
+                            className="px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20 rounded-md transition-colors"
+                          >
+                            Chi tiết
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -690,5 +890,90 @@ export default function UploadPage() {
         )}
       </div>
     </div>
+      
+      {/* ── Modal Chi Tiết Lịch Sử ── */}
+      {selectedHistoryDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-5xl max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Chi tiết dữ liệu đã nạp</h3>
+              <button 
+                onClick={() => setSelectedHistoryDetails(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Sheet</th>
+                      <th className="px-4 py-3 font-medium">Mã tham chiếu</th>
+                      <th className="px-4 py-3 font-medium">Hành động</th>
+                      <th className="px-4 py-3 font-medium">Chi tiết</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {selectedHistoryDetails.map((detail, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-700 dark:text-slate-300">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-medium">
+                            {detail.sheet}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
+                          {detail.code}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-bold ${
+                            detail.action === 'Thêm mới' 
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' 
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
+                          }`}>
+                            {detail.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+                          <div className="flex flex-col gap-1.5">
+                            {Array.isArray(detail.details) ? detail.details.map((change, cidx) => {
+                              const formatValue = (v: any) => {
+                                if (v === null || v === undefined || v === "-") return "Trống";
+                                if (typeof v === "number" || !isNaN(Number(v))) {
+                                  const num = Number(v);
+                                  if (num > 1000 || num < -1000 || typeof v === "number") {
+                                    return new Intl.NumberFormat('vi-VN').format(num);
+                                  }
+                                }
+                                return String(v);
+                              };
+                              return (
+                                <div key={cidx} className="flex flex-wrap items-center gap-1.5 text-xs bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-md">
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300 mr-1">{change.column}:</span>
+                                  {detail.action === 'Cập nhật' ? (
+                                    <>
+                                      <span className="line-through text-slate-400 dark:text-slate-500">{formatValue(change.old)}</span>
+                                      <span className="text-slate-400 dark:text-slate-500">➔</span>
+                                      <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatValue(change.new)}</span>
+                                    </>
+                                  ) : (
+                                    <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatValue(change.new)}</span>
+                                  )}
+                                </div>
+                              );
+                            }) : String(detail.details)}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

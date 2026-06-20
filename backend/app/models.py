@@ -53,6 +53,9 @@ class UploadedFile(Base):
     total_rows = Column(Integer, default=0)
     valid_rows = Column(Integer, default=0)
     error_rows = Column(Integer, default=0)
+    inserted_rows = Column(Integer, default=0)
+    updated_rows = Column(Integer, default=0)
+    preview_details = Column(Text, nullable=True)
 
 class BudgetItem(Base):
     __tablename__ = "budget_items"
