@@ -211,16 +211,32 @@ export default function ReportsPage() {
         {selectedReport ? (
           <div ref={contentRef} className="flex-1 overflow-auto bg-gray-950 p-6 flex flex-col items-center print:p-8 print:overflow-visible print:block print:bg-white print:text-black">
             
+            {/* Report Header (Visible mainly for Context & Print) */}
+            <div className="w-full max-w-4xl mb-8 border-b border-gray-800 pb-6 print:border-gray-300">
+              <h1 className="text-3xl font-bold text-white print:text-black mb-2">
+                {selectedReport.title}
+              </h1>
+              <p className="text-gray-400 print:text-gray-600 text-sm">
+                Ngày tạo báo cáo: {new Date(selectedReport.created_at).toLocaleDateString("vi-VN", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+
             {/* Chart Section */}
             {!isEditing && chartData.length > 0 && (
-              <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 print:flex print:flex-col print:gap-12 print:mb-12">
                 
                 {/* Bar Chart */}
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl flex flex-col print:break-inside-avoid print:shadow-none print:border-none print:p-0">
-                  <h3 className="text-lg font-semibold text-gray-300 mb-4 flex items-center">
+                  <h3 className="text-lg font-semibold text-gray-300 mb-4 flex items-center print:text-black">
                     <FiPieChart className="mr-2 text-purple-400" /> Biểu đồ Tổng quan Ngân sách
                   </h3>
-                  <div className="flex-1 min-h-[250px] w-full">
+                  <div className="flex-1 min-h-[300px] print:h-[300px] print:min-h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={true} vertical={false} />
@@ -241,17 +257,17 @@ export default function ReportsPage() {
 
                 {/* Pie Chart */}
                 {pieData.length > 0 && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl flex flex-col print:break-inside-avoid print:shadow-none print:border-none print:p-0">
-                    <h3 className="text-lg font-semibold text-gray-300 mb-4 flex items-center">
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl flex flex-col print:break-inside-avoid print:shadow-none print:border-none print:p-0 print:mt-8">
+                    <h3 className="text-lg font-semibold text-gray-300 mb-4 flex items-center print:text-black">
                       <FiPieChart className="mr-2 text-blue-400" /> Cơ cấu Thực chi theo Phòng ban
                     </h3>
-                    <div className="flex-1 min-h-[250px] w-full">
+                    <div className="flex-1 min-h-[350px] print:h-[350px] print:min-h-[350px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
                             data={pieData}
                             cx="50%"
-                            cy="50%"
+                            cy="40%"
                             innerRadius={60}
                             outerRadius={90}
                             paddingAngle={5}
@@ -266,7 +282,12 @@ export default function ReportsPage() {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             formatter={(value: any) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(value))}
                           />
-                          <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px' }} />
+                          <Legend 
+                            layout="horizontal" 
+                            verticalAlign="bottom" 
+                            align="center" 
+                            wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} 
+                          />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>

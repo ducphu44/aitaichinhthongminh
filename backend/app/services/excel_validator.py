@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import json
 from sqlalchemy.orm import Session
@@ -39,13 +40,49 @@ def normalize_columns(df):
     """Rename columns using COL_ALIASES so downstream code uses canonical names."""
     return df.rename(columns=COL_ALIASES)
 
+def load_excel_file(file_path: str):
+    """Attempt to load Excel file with openpyxl, fallback to xlrd if zip/format error."""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".numbers":
+        raise ValueError("Hệ thống không hỗ trợ định dạng Apple Numbers (.numbers). Vui lòng mở file bằng Numbers và chọn File -> Export To -> Excel (.xlsx) để tải lên.")
+
+    try:
+        xl = pd.ExcelFile(file_path, engine="openpyxl")
+        return xl, "openpyxl"
+    except Exception as e:
+        err_str = str(e)
+        # Nếu lỗi liên quan đến zip (đặc trưng của việc dùng openpyxl đọc file .xls)
+        if "Content_Types" in err_str or "zip" in err_str.lower() or "BadZipFile" in err_str:
+            try:
+                xl = pd.ExcelFile(file_path, engine="xlrd")
+                return xl, "xlrd"
+            except Exception as e2:
+                raise ValueError(f"File không đúng chuẩn .xlsx và cũng không phải .xls hợp lệ. Chi tiết lỗi: {str(e2)}")
+        raise ValueError(f"Lỗi đọc file: {err_str}")
+
+
 def validate_excel_file(file_path: str, upload_id: int, db: Session):
     try:
         # Load the Excel file to read sheet names
-        xl = pd.ExcelFile(file_path)
+        xl, engine = load_excel_file(file_path)
         sheet_names = xl.sheet_names
-    except Exception as e:
+    except ValueError as e:
         # File could not be read as Excel
+        db.add(ImportError(
+            upload_id=upload_id,
+            row_index=0,
+            error_message=f"Không thể đọc file Excel. Định dạng không hợp lệ hoặc file bị lỗi: {str(e)}",
+            raw_data=None
+        ))
+        db.query(UploadedFile).filter(UploadedFile.id == upload_id).update({
+            "import_status": "Failed",
+            "total_rows": 0,
+            "valid_rows": 0,
+            "error_rows": 1
+        })
+        db.commit()
+        return False
+    except Exception as e:
         db.add(ImportError(
             upload_id=upload_id,
             row_index=0,
@@ -104,7 +141,7 @@ def validate_excel_file(file_path: str, upload_id: int, db: Session):
         actual_sheet_name = sheet_mapping[sheet_name]
         try:
             # Read sheet
-            df = pd.read_excel(xl, sheet_name=actual_sheet_name)
+            df = pd.read_excel(xl, sheet_name=actual_sheet_name, engine=engine)
             # Normalize column names (strip whitespace + apply aliases)
             df.columns = [str(col).strip() for col in df.columns]
             df = normalize_columns(df)

@@ -7,8 +7,8 @@ python-multipart
 python-jose[cryptography]
 passlib[bcrypt]
 bcrypt<4.0.0
-pandas
-openpyxl
+pandas==2.2.3
+openpyxl>=3.1.2
 python-dotenv
 openai
 psycopg2-binary
